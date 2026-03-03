@@ -1,48 +1,53 @@
 🛡️ Proof of Discipline (PoD)
-The Decentralized Commitment Protocol on Solana
+Decentralized Accountability Protocol on Solana
+Proof of Discipline adalah aplikasi akuntabilitas berbasis Web3 yang dirancang untuk membantu pengguna mengatasi adiksi atau mencapai target personal melalui insentif ekonomi yang transparan di jaringan Solana.
 
-Proof of Discipline is a Web3-native accountability layer designed to help people crush addictions and hit their life goals using transparent, economic incentives. We’re turning "willpower" into a programmable asset.
+🚀 Project Overview
+Banyak orang kesulitan menjaga komitmen karena tidak adanya konsekuensi nyata. PoD hadir untuk menyelesaikan masalah ini dengan memanfaatkan Smart Contract untuk mengunci dana taruhan pengguna secara aman.
 
-🚀 The Mission
-Most people fail their goals because talk is cheap and there are no real stakes. PoD fixes this by using Solana Smart Contracts to put your money where your mouth is.
+Stake for Success: Pengguna mengunci sejumlah SOL (misal: 0.1 SOL) sebagai jaminan komitmen mereka.
 
-Stake for Success: Lock up SOL or USDC as a "commitment bond."
+Guardian System: Pihak ketiga yang dipercaya bertindak sebagai verifikator untuk menentukan keberhasilan tugas.
 
-The Guardian System: Assign a trusted friend or mentor as your on-chain verifier.
+Trustless Escrow: Dana dikelola sepenuhnya oleh kode program (PDA), memberikan keamanan tanpa perlu perantara manusia.
 
-Trustless Escrow: No middleman. Your funds are managed by code, not a central admin.
-
-Social Impact: When you fail, the world wins. "Slashed" funds are automatically routed to charity or a reward pool for top performers.
+Economic Incentive: Jika komitmen gagal, dana akan dialokasikan ke alamat charity sebagai bentuk konsekuensi (slashing).
 
 🛠️ Tech Stack
 Blockchain: Solana (Devnet)
 
 Framework: Anchor (Rust)
 
-IDE: Solana Playground
+Development Tools: Solana Playground
 
-Frontend: Built via "Vibe Coding" (Lovable.dev) — Coming Soon
+Hardware: Acer Nitro High-Spec Laptop
 
-🧠 How It Works (The Logic)
-Initialize Challenge: Creates a secure PDA (Program Derived Address) to hold your stakes.
+⛓️ On-Chain Information
+Proyek ini telah berhasil di-deploy di Solana Devnet:
 
-Deadline Enforcement: Uses on-chain timestamps to ensure deadlines are immutable.
+Program ID: BahwmLoSeXUGiJtn1DwwSRji9iZEwBmgVyimgdsa2HTf
 
-The Slash Mechanism: If the goal isn't met, the slash() function triggers, sending funds to the Charity_Vault.
+Network: Devnet
 
-Proof of Victory: Once verified, the complete() function releases 100% of the funds back to the user.
+📁 Repository Structure
+programs/src/lib.rs: Logika utama smart contract (Initialize, Complete, Slash).
+
+client/client.ts: Script testing untuk berinteraksi dengan program di blockchain.
 
 📈 Roadmap
 [x] Research & Tokenomics Design
 
-[ ] In Progress: Smart Contract Development (Anchor)
+[x] Smart Contract Development & Deployment
 
-[ ] Web3 Integration (Phantom Wallet Support)
+[ ] Wallet Integration (Phantom)
 
-[ ] UI/UX Deployment
+[ ] Frontend UI Development (React/Tailwind)
 
-[ ] Beta Testing with the Superteam Indonesia Community
+[ ] Community Testing with Superteam Indonesia
 
-👤 About the Dev
-Name: [Dr_chaos]
-Vibe: 3D Modeler & Aspiring Web3 Developer
+👤 About the Author
+Location: Bandung, Indonesia
+
+Background: Architecture (SketchUp, AutoCAD, Revit) & Web3 Developer
+
+Focus: SocialFi, Behavioral Economics, and dApp Development.
