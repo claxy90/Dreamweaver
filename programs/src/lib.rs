@@ -1,8 +1,11 @@
 use anchor_lang::prelude::*;
-use anchor_lang::system_program;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("BahwmLoSeXUGiJtn1DwwSRji9iZEwBmgVyimgdsa2HTf");
+declare_id!("5avhhG8X47wEuLTk2H5x3MgxXBDZnUb8BcZ52Cwr3a6s");
 
+// USDC mint address di Devnet
+pub const USDC_MINT: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 pub const CHARITY_WALLET: &str = "W7Pg6Di2UJGjdVVFET1Q2DuCtNcJC2fQF8hJ4VpRGAB";
 
 #[program]
@@ -20,14 +23,16 @@ pub mod commitment_dapp {
             CommitmentError::InvalidTimestamp
         );
 
-        let cpi_context = CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            system_program::Transfer {
-                from: ctx.accounts.user.to_account_info(),
-                to: ctx.accounts.challenge.to_account_info(),
+        // Transfer USDC dari user ke vault (token account milik PDA)
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.user_token_account.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
             },
         );
-        system_program::transfer(cpi_context, amount)?;
+        token::transfer(cpi_ctx, amount)?;
 
         let challenge = &mut ctx.accounts.challenge;
         challenge.user = ctx.accounts.user.key();
@@ -51,8 +56,23 @@ pub mod commitment_dapp {
         challenge.status = ChallengeStatus::Succeeded;
 
         let amount = challenge.amount;
-        **challenge.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.user.try_borrow_mut_lamports()? += amount;
+        let user_key = challenge.user;
+        let bump = challenge.bump;
+
+        // PDA menandatangani transfer USDC kembali ke user
+        let seeds = &[b"challenge".as_ref(), user_key.as_ref(), &[bump]];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.vault.to_account_info(),
+                to: ctx.accounts.user_token_account.to_account_info(),
+                authority: ctx.accounts.challenge.to_account_info(),
+            },
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx, amount)?;
 
         Ok(())
     }
@@ -65,25 +85,39 @@ pub mod commitment_dapp {
             CommitmentError::ChallengeNotActive
         );
 
+        // Validasi charity wallet
         let charity_pubkey = CHARITY_WALLET
             .parse::<Pubkey>()
             .map_err(|_| CommitmentError::InvalidCharityAddress)?;
-
         require!(
-            ctx.accounts.charity.key() == charity_pubkey,
+            ctx.accounts.charity_token_account.owner == charity_pubkey,
             CommitmentError::InvalidCharityAddress
         );
 
         challenge.status = ChallengeStatus::Failed;
 
         let amount = challenge.amount;
-        **challenge.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.charity.try_borrow_mut_lamports()? += amount;
+        let user_key = challenge.user;
+        let bump = challenge.bump;
+
+        // PDA menandatangani transfer USDC ke charity
+        let seeds = &[b"challenge".as_ref(), user_key.as_ref(), &[bump]];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.vault.to_account_info(),
+                to: ctx.accounts.charity_token_account.to_account_info(),
+                authority: ctx.accounts.challenge.to_account_info(),
+            },
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx, amount)?;
 
         Ok(())
     }
 
-    // ← SEKARANG ADA DI DALAM #[program]
     pub fn close_challenge(ctx: Context<CloseChallenge>) -> Result<()> {
         let challenge = &ctx.accounts.challenge;
 
@@ -96,14 +130,17 @@ pub mod commitment_dapp {
     }
 }
 
+// ─── Account Structs ──────────────────────────────────────────────────────────
+
 #[derive(Accounts)]
 pub struct InitializeChallenge<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    /// CHECK: Guardian stored as Pubkey only
+    /// CHECK: Guardian disimpan sebagai Pubkey saja
     pub guardian: UncheckedAccount<'info>,
 
+    // Data account challenge (PDA)
     #[account(
         init,
         payer = user,
@@ -113,6 +150,31 @@ pub struct InitializeChallenge<'info> {
     )]
     pub challenge: Account<'info, Challenge>,
 
+    // USDC token account milik user (sumber dana)
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = user,
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
+
+    // Vault: token account yang di-hold oleh PDA challenge
+    #[account(
+        init,
+        payer = user,
+        associated_token::mint = mint,
+        associated_token::authority = challenge,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    // USDC mint (devnet)
+    #[account(
+        constraint = mint.key() == USDC_MINT.parse::<Pubkey>().unwrap() @ CommitmentError::InvalidMint
+    )]
+    pub mint: Account<'info, Mint>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -121,13 +183,29 @@ pub struct ResolveChallenge<'info> {
     #[account(mut)]
     pub guardian: Signer<'info>,
 
-    /// CHECK: Validated via has_one
+    /// CHECK: Divalidasi lewat has_one
     #[account(mut)]
     pub user: UncheckedAccount<'info>,
 
-    /// CHECK: Validated at runtime
+    // USDC token account user (tujuan complete)
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = user,
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
+
+    // USDC token account charity (tujuan slash)
     #[account(mut)]
-    pub charity: UncheckedAccount<'info>,
+    pub charity_token_account: Account<'info, TokenAccount>,
+
+    // Vault PDA
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = challenge,
+    )]
+    pub vault: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -138,6 +216,9 @@ pub struct ResolveChallenge<'info> {
     )]
     pub challenge: Account<'info, Challenge>,
 
+    pub mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -156,14 +237,16 @@ pub struct CloseChallenge<'info> {
     pub challenge: Account<'info, Challenge>,
 }
 
+// ─── Data ─────────────────────────────────────────────────────────────────────
+
 #[account]
 pub struct Challenge {
-    pub user: Pubkey,
-    pub guardian: Pubkey,
-    pub amount: u64,
-    pub end_timestamp: i64,
-    pub status: ChallengeStatus,
-    pub bump: u8,
+    pub user: Pubkey,       // 32
+    pub guardian: Pubkey,   // 32
+    pub amount: u64,        // 8  (dalam USDC lamports: 1 USDC = 1_000_000)
+    pub end_timestamp: i64, // 8
+    pub status: ChallengeStatus, // 1
+    pub bump: u8,           // 1
 }
 
 impl Challenge {
@@ -176,6 +259,8 @@ pub enum ChallengeStatus {
     Succeeded,
     Failed,
 }
+
+// ─── Errors ───────────────────────────────────────────────────────────────────
 
 #[error_code]
 pub enum CommitmentError {
@@ -193,4 +278,6 @@ pub enum CommitmentError {
     InvalidCharityAddress,
     #[msg("Challenge is still active, cannot close.")]
     ChallengeStillActive,
+    #[msg("Invalid mint address. Must be USDC.")]
+    InvalidMint,
 }
